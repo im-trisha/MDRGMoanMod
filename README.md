@@ -1,5 +1,7 @@
 # MoanMod
 
+![](https://raw.githubusercontent.com/IkariDevGIT/MDRGMoanMod/refs/heads/master/PeopLearnToRead.png)
+
 [Preview video](https://tr.ee/W9rxezOVbP)
 
 ## Table of Contents
