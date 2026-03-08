@@ -1,6 +1,6 @@
 # MoanMod
 
-![](https://raw.githubusercontent.com/IkariDevGIT/MDRGMoanMod/refs/heads/master/PeopLearnToRead.png)
+![](https://raw.githubusercontent.com/IkariDevGIT/MDRGMoanMod/refs/heads/master/PeopleLearnToRead.png)
 
 [Preview video](https://tr.ee/W9rxezOVbP)
 
