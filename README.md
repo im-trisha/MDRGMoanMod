@@ -60,7 +60,7 @@ Audio and expression mod for *My Dystopian Robot Girlfriend* with dynamic moanin
    * Press "Add game manually"
    * Find and select the game's .exe file
    * Click on the game in the selection menu
-   * Do NOT enable "nightly" builds, use the default
+   * DO NOT enable "nightly builds". Install the MelonLoader version "0.7.2".
    * Hit install
 
 3. First launch:
@@ -116,7 +116,7 @@ Updating the mod works the same way as uninstalling:
    - Press "Add game manually"
    - Find and select the game's .exe file
    - Click on the game in the selection menu
-   - Do NOT enable "nightly" builds, use the default
+   - DO NOT enable "nightly builds". Install the MelonLoader version "0.7.2".
    - Hit install
 
 3. First launch:
