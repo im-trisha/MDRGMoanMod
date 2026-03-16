@@ -91,6 +91,9 @@ Game Install Folder/
         └── breath/
 ```
 
+> **Important**: Make sure your game installation path **does not contain non-Latin characters** (for example Cyrillic, Chinese, Japanese, etc.).  
+> Install the game in a folder with only standard English letters (e.g. `C:\Games\MDRG`). Otherwise the mod may not work.
+
 ## Updating / Uninstalling
 
 Updating the mod works the same way as uninstalling:
