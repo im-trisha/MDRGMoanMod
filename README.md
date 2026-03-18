@@ -6,6 +6,9 @@
     <img src="https://img.youtube.com/vi/z99mzG_yVjg/0.jpg" alt="Tutorial video by KlahTune">
   </a>
 </p>
+<p align="center">
+  Click on it to open the video.
+</p>
 
 <br><br><br><br><br>
 
