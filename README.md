@@ -1,8 +1,15 @@
 # MoanMod
 
-![](https://raw.githubusercontent.com/IkariDevGIT/MDRGMoanMod/refs/heads/master/PeopleLearnToRead.png)
+## Tutorial video by KlahTune (Easy installation!)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=z99mzG_yVjg">
+    <img src="https://img.youtube.com/vi/z99mzG_yVjg/0.jpg" alt="Tutorial video by KlahTune">
+  </a>
+</p>
 
-[Preview video](https://tr.ee/W9rxezOVbP)
+<br><br><br><br><br>
+
+[Preview video of the mod](https://tr.ee/W9rxezOVbP)
 
 ## Table of Contents
 
@@ -15,6 +22,8 @@
 * [Configuration](#configuration)
 * [Requirements](#requirements)
 * [License](#license)
+
+![](https://raw.githubusercontent.com/IkariDevGIT/MDRGMoanMod/refs/heads/master/PeopleLearnToRead.png)
 
 ## Version Notice
 
