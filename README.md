@@ -3,7 +3,7 @@
 ## Tutorial video by KlahTune (Easy installation!)
 <p align="center">
   <a href="https://www.youtube.com/watch?v=z99mzG_yVjg">
-    <img src="https://img.youtube.com/vi/z99mzG_yVjg/0.jpg" alt="Tutorial video by KlahTune">
+    <img src="https://img.youtube.com/vi/z99mzG_yVjg/maxresdefault.jpg" alt="Tutorial video by KlahTune">
   </a>
 </p>
 <p align="center">
