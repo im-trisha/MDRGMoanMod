@@ -5,7 +5,7 @@ using MelonLoader.Utils;
 using System.Reflection;
 using System.Linq;
 
-[assembly: MelonInfo(typeof(MoanMod.MoanMod), "Moan Mod", "1.4.1-pre", "IkariDev")]
+[assembly: MelonInfo(typeof(MoanMod.MoanMod), "Moan Mod", "1.4.2-pre", "IkariDev")]
 [assembly: MelonGame("IncontinentCell", "My Dystopian Robot Girlfriend")]
 
 namespace MoanMod
@@ -592,15 +592,17 @@ namespace MoanMod
 
         private bool IsInSexScene()
         {
-            if (brain == null) return false;
-            var currentState = brain.CurrentState;
+            var currentState = brain?.CurrentState;   
             if (currentState == null) return false;
 
             var fuckState = currentState.TryCast<Il2Cpp.GenericFuckBrainState>();
-            if (fuckState != null) return true;
+            if (fuckState is not null) return true;
 
             var cowgirlState = currentState.TryCast<Il2Cpp.CowgirlBrainState>();
-            return cowgirlState != null;
+            if(cowgirlState is not null) return true;
+
+            var showerState = currentState.TryCast<Il2Cpp.ShowerBrainState>();
+            return showerState != null;
         }
 
         private bool IsBeingHeadpatted()
