@@ -12,19 +12,6 @@ namespace MoanMod
 {
     public class MoanMod : MelonMod
     {
-        // Popup state enum
-        private enum PopupState
-        {
-            NotShown,
-            ShowingNotice,
-            NoticeShown,
-            ShowingPreference,
-            PreferenceShown,
-            CheckingUpdates,
-            ShowingUpdate,
-            Done
-        }
-
         // Cached mod version (read once in OnInitializeMelon)
         private static string modVersion = null;
         private Il2Cpp.ModelBrain brain;
@@ -65,7 +52,7 @@ namespace MoanMod
         private bool isInCluster = false;
 
         // breath system
-        private System.Collections.Generic.Queue<float> moanTimestamps = new System.Collections.Generic.Queue<float>();
+        private Queue<float> moanTimestamps = new Queue<float>();
         private bool lastActionWasBreath = false;
         private bool breathBeforeMoan = false;
         private bool breathPlaying = false;
@@ -732,10 +719,7 @@ namespace MoanMod
             MelonLogger.Msg($"Cluster ended after {currentClusterCount} moans. Cooldown: {sexMoanCooldown:F2}s");
         }
 
-        private void AddMoanTimestamp()
-        {
-            moanTimestamps.Enqueue(Time.time);
-        }
+        private void AddMoanTimestamp() => moanTimestamps.Enqueue(Time.time);
 
         private int GetMoanCountInWindow()
         {
@@ -766,23 +750,22 @@ namespace MoanMod
         private void StartBreathSequence(string moanType)
         {
             float breathLength = audioPlayer.PlayBreath();
-            if (breathLength > 0f)
-            {
-                breathBeforeMoan = true;
-                breathPlaying = true;
-                breathTimer = breathLength;
-                pendingMoanType = moanType;
-                lastActionWasBreath = true;
+            if (breathLength <= 0f) return;
+            
+            breathBeforeMoan = true;
+            breathPlaying = true;
+            breathTimer = breathLength;
+            pendingMoanType = moanType;
+            lastActionWasBreath = true;
 
-                // open mouth for breath
-                currentMouthOpenAmount = UnityEngine.Random.Range(MoanModConfig.BreathMouthOpen.Min, MoanModConfig.BreathMouthOpen.Max);
-                shouldMouthBeOpen = true;
-                mouthCloseTimer = breathLength;
+            // open mouth for breath
+            currentMouthOpenAmount = UnityEngine.Random.Range(MoanModConfig.BreathMouthOpen.Min, MoanModConfig.BreathMouthOpen.Max);
+            shouldMouthBeOpen = true;
+            mouthCloseTimer = breathLength;
 
-                string breathName = audioPlayer.GetLastPlayedBreathName();
-                int moanCount = GetMoanCountInWindow();
-                MelonLogger.Msg($"Breath '{breathName}'! Length: {breathLength:F2}s, Moans in last {MoanModConfig.Breath.MoanTrackingWindow:F1}s: {moanCount}");
-            }
+            string breathName = audioPlayer.GetLastPlayedBreathName();
+            int moanCount = GetMoanCountInWindow();
+            MelonLogger.Msg($"Breath '{breathName}'! Length: {breathLength:F2}s, Moans in last {MoanModConfig.Breath.MoanTrackingWindow:F1}s: {moanCount}");
         }
 
         private void PlayCummingMoan()
@@ -887,7 +870,7 @@ namespace MoanMod
 
         private string GetModVersionFromAssembly()
         {
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            var assembly = Assembly.GetExecutingAssembly();
             var melonInfoAttr = assembly.GetCustomAttributes(typeof(MelonInfoAttribute), false).FirstOrDefault() as MelonInfoAttribute;
 
             if (melonInfoAttr != null && !string.IsNullOrEmpty(melonInfoAttr.Version))
@@ -898,7 +881,6 @@ namespace MoanMod
             MelonLogger.Error("Failed to read mod version from MelonInfo");
             throw new System.Exception("Cannot determine mod version");
         }
-
 
         private void ShowUpdatePopup()
         {
@@ -912,12 +894,9 @@ namespace MoanMod
             string updateMessage = UpdateChecker.GetUpdateMessage(modVersion, releases);
 
             var choices = new Il2CppSystem.Collections.Generic.List<Il2Cpp.PopupChoice>();
-            choices.Add(new Il2Cpp.PopupChoice("Skip", new System.Action(() => { })));
-            choices.Add(new Il2Cpp.PopupChoice("Open in Browser", new System.Action(() =>
-            {
-                OpenUrlInBrowser(updateChecker.UpdateReleaseUrl);
-            })));
-            choices.Add(new Il2Cpp.PopupChoice("Disable Notifications", new System.Action(() =>
+            choices.Add(new Il2Cpp.PopupChoice("Skip", (Action)(() => { })));
+            choices.Add(new Il2Cpp.PopupChoice("Open in Browser", (Action)(() => OpenUrlInBrowser(updateChecker.UpdateReleaseUrl))));
+            choices.Add(new Il2Cpp.PopupChoice("Disable Notifications", (Action)(() =>
             {
                 prefUpdateCheckingEnabled.Value = false;
                 MelonPreferences.Save();
@@ -928,16 +907,12 @@ namespace MoanMod
 
         private void OpenUrlInBrowser(string url)
         {
+            if (string.IsNullOrEmpty(url)) return;
             try
             {
-                if (string.IsNullOrEmpty(url))
-                {
-                    return;
-                }
-
-                UnityEngine.Application.OpenURL(url);
+                Application.OpenURL(url);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 MelonLogger.Error($"Failed to open browser: {ex.Message}");
             }
