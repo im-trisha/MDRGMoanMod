@@ -2,46 +2,47 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using MelonLoader;
 using UnityEngine.Networking;
 
 namespace MoanMod
 {
+
     public class SemanticVersion : IComparable<SemanticVersion>
     {
-        public int Major { get; set; }
-        public int Minor { get; set; }
-        public int Patch { get; set; }
-        public string PrereleaseSuffix { get; set; } = "";
+        private static readonly Regex SemVerRegex = new Regex(
+            @"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$",
+            RegexOptions.Compiled
+        );
 
-        public bool IsPrerelease => !string.IsNullOrEmpty(PrereleaseSuffix);
+        public int Major { get; private set; }
+        public int Minor { get; private set; }
+        public int Patch { get; private set; }
+        public string Prerelease { get; private set; } = "";
+        public string BuildMetadata { get; private set; } = "";
+
+        public bool IsPrerelease => !string.IsNullOrEmpty(Prerelease);
+        public bool HasBuildMetadata => !string.IsNullOrEmpty(BuildMetadata);
 
         public SemanticVersion(string versionString)
         {
-            Parse(versionString);
+            if (string.IsNullOrWhiteSpace(versionString))
+                throw new ArgumentNullException(nameof(versionString));
+
+            versionString = versionString.TrimStart('v', 'V');
+
+            Match match = SemVerRegex.Match(versionString);
+            if (!match.Success) throw new ArgumentException($"Invalid semver 2.0.0: {versionString}");
+
+            Major = int.Parse(match.Groups[1].Value);
+            Minor = int.Parse(match.Groups[2].Value);
+            Patch = int.Parse(match.Groups[3].Value);
+
+            Prerelease = match.Groups[4].Value;
+            BuildMetadata = match.Groups[5].Value;
         }
 
-        private void Parse(string versionString)
-        {
-            versionString = versionString.TrimStart('v');
-
-            var parts = versionString.Split('-');
-            var versionPart = parts[0];
-            PrereleaseSuffix = parts.Length > 1 ? string.Join("-", parts.Skip(1)) : "";
-
-            var versionNumbers = versionPart.Split('.');
-            if (versionNumbers.Length < 3)
-                throw new ArgumentException($"Invalid version format: {versionString}");
-
-            if (!int.TryParse(versionNumbers[0], out int major) ||
-                !int.TryParse(versionNumbers[1], out int minor) ||
-                !int.TryParse(versionNumbers[2], out int patch))
-                throw new ArgumentException($"Invalid version format: {versionString}");
-
-            Major = major;
-            Minor = minor;
-            Patch = patch;
-        }
 
         public int CompareTo(SemanticVersion other)
         {
@@ -51,51 +52,32 @@ namespace MoanMod
             if (Minor != other.Minor) return Minor.CompareTo(other.Minor);
             if (Patch != other.Patch) return Patch.CompareTo(other.Patch);
 
-            if (!IsPrerelease && !other.IsPrerelease) return 0;
-
             if (!IsPrerelease && other.IsPrerelease) return 1;
             if (IsPrerelease && !other.IsPrerelease) return -1;
+            if (!IsPrerelease && !other.IsPrerelease) return 0;
 
-            return PrereleaseSuffix.CompareTo(other.PrereleaseSuffix);
+            return Prerelease.CompareTo(other.Prerelease); // wrong according to semver, but kept because CBA
         }
 
         public override string ToString()
         {
             var version = $"{Major}.{Minor}.{Patch}";
-            if (!string.IsNullOrEmpty(PrereleaseSuffix))
-                version += $"-{PrereleaseSuffix}";
+            if (IsPrerelease) version += $"-{Prerelease}";
+            if (HasBuildMetadata) version += $"+{BuildMetadata}";
             return version;
         }
 
-        public override bool Equals(object obj)
-        {
-            return obj is SemanticVersion other && CompareTo(other) == 0;
-        }
+        public override bool Equals(object obj) => CompareTo(obj as SemanticVersion) == 0;
 
-        public override int GetHashCode()
-        {
-            return ToString().GetHashCode();
-        }
+        public override int GetHashCode() => HashCode.Combine(Major, Minor, Patch, Prerelease);
+        
+        public static bool operator >(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) > 0;
 
-        public static bool operator >(SemanticVersion left, SemanticVersion right)
-        {
-            return left.CompareTo(right) > 0;
-        }
+        public static bool operator <(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) < 0;
 
-        public static bool operator <(SemanticVersion left, SemanticVersion right)
-        {
-            return left.CompareTo(right) < 0;
-        }
+        public static bool operator >=(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) >= 0;
 
-        public static bool operator >=(SemanticVersion left, SemanticVersion right)
-        {
-            return left.CompareTo(right) >= 0;
-        }
-
-        public static bool operator <=(SemanticVersion left, SemanticVersion right)
-        {
-            return left.CompareTo(right) <= 0;
-        }
+        public static bool operator <=(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) <= 0;
     }
 
     public class GitHubRelease
@@ -213,33 +195,30 @@ namespace MoanMod
 
             try
             {
-                using (JsonDocument doc = JsonDocument.Parse(json))
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Array) return new List<GitHubRelease>();
+                    
+                foreach (var element in root.EnumerateArray())
                 {
-                    var root = doc.RootElement;
-                    if (root.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var element in root.EnumerateArray())
-                        {
-                            if (element.TryGetProperty("tag_name", out var tagNameElement) &&
-                                element.TryGetProperty("html_url", out var htmlUrlElement))
-                            {
-                                string tagName = tagNameElement.GetString();
-                                string htmlUrl = htmlUrlElement.GetString();
+                    if (!element.TryGetProperty("tag_name", out var tagNameElement) ||
+                        !element.TryGetProperty("html_url", out var htmlUrlElement)) continue;
+                        
+                    string tagName = tagNameElement.GetString();
+                    string htmlUrl = htmlUrlElement.GetString();
 
-                                try
-                                {
-                                    var version = new SemanticVersion(tagName);
-                                    releases.Add(new GitHubRelease
-                                    {
-                                        TagName = tagName,
-                                        HtmlUrl = htmlUrl,
-                                        Version = version
-                                    });
-                                }
-                                catch (ArgumentException) { }
-                            }
-                        }
+                    try
+                    {
+                        var version = new SemanticVersion(tagName);
+                        releases.Add(new GitHubRelease
+                        {
+                            TagName = tagName,
+                            HtmlUrl = htmlUrl,
+                            Version = version
+                        });
                     }
+                    catch (ArgumentException) { }
+                        
                 }
             }
             catch (Exception) { }
