@@ -17,17 +17,13 @@
     </PropertyGroup>
 
     <Target Name="ValidateSetup" BeforeTargets="BeforeBuild">
-        <Error Condition="!Exists('Local.props')"
-                Text="Missing Local.props file. Copy Local.props.example and set your GameDir" />
+        <Error Condition="!Exists('Local.props')" Text="Missing Local.props file. Copy Local.props.example and set your GameDir" />
 
-        <Error Condition="'$(GameDir)' == ''"
-		        Text="GameDir is not set. Define it in Local.props or via MDRG_GAME_DIR env var" />
+        <Error Condition="'$(GameDir)' == ''" Text="GameDir is not set. Define it in Local.props or via MDRG_GAME_DIR env var" />
 
-        <Error Condition="!Exists('$(GameDir)')"
-		        Text="GameDir does not exist: $(GameDir)" />
+        <Error Condition="!Exists('$(GameDir)')" Text="GameDir does not exist: $(GameDir)" />
 
-        <Error Condition="!Exists('$(GameDir)\MelonLoader')"
-		        Text="MelonLoader not found in $(GameDir); is this the correct game folder?" />
+        <Error Condition="!Exists('$(GameDir)\MelonLoader')" Text="MelonLoader not found in $(GameDir); is this the correct game folder?" />
     </Target>
 
 	<!-- MelonLoader framework references -->
