@@ -31,7 +31,16 @@
 > **Version Notice**: This mod is actively developed and tested only for the **latest version** of My Dystopian Robot Girlfriend. Using it with older game versions may result in bugs or crashes.
 
 > [!CAUTION]
-> This mod is ONLY supported on Windows and Linux (Not native, only via Proton (untested)) officially (You MAY be able to get it working on mac via [this guide](https://github.com/LAOUUUUU/MacOS-MoanMod/tree/main) (**Guide is untested, and not verified, use at your own risk**)). I do not give support for **Lemonloader**/Android not working.
+> Supported OS:<br>
+> - Windows (Native)<br>
+> - Linux (Not native, only via Proton **(untested)**)<br>
+> - MacOS (Not native, You MAY be able to get it working on mac via [this guide](https://github.com/LAOUUUUU/MacOS-MoanMod/tree/main). **Guide is untested, and not verified, use at your own risk**)
+
+> [!CAUTION]
+> NOT supported:<br>
+> - Android (I am aware that **Lemonloader** exists, but Lemonloader is outdated and does NOT work with the unity version of MDRG.)<br>
+> - iOS<br>
+> - Web
 
 > This mod is only compatible with MDRG 0.95 and onwards. 0.90 and below is **NOT** supported.
 
