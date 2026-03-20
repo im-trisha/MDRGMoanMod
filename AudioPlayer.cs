@@ -213,10 +213,9 @@ namespace MoanMod
 
         public void UpdateSoundManager()
         {
-            if (soundManager == null)
-            {
-                soundManager = GameObject.FindObjectOfType<Il2Cpp.SoundSingleton>();
-            }
+            if (soundManager is not null) return;
+            
+            soundManager = GameObject.FindObjectOfType<Il2Cpp.SoundSingleton>();
         }
 
         public void PlayStartMoan(float volume = 1.0f)
