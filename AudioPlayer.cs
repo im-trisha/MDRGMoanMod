@@ -93,41 +93,23 @@ namespace MoanMod
 
         public void LoadAllAudioFiles(string modFolder)
         {
-            string startFolder = Path.Combine(modFolder, "cumming", "start");
-            string whileFolder = Path.Combine(modFolder, "cumming", "while");
-            string endFolder = Path.Combine(modFolder, "cumming", "end");
-            string sexFolder = Path.Combine(modFolder, "while");
-            string breathFolder = Path.Combine(modFolder, "breath");
+            var clips = new[] {
+                (Path.Combine(modFolder, "cumming", "start"), startMoans, "start"),
+                (Path.Combine(modFolder, "cumming", "while"), whileMoans, "while"),
+                (Path.Combine(modFolder, "cumming", "end"), endMoans, "end"),
+                (Path.Combine(modFolder, "while"), sexMoans, "sex"),
+                (Path.Combine(modFolder, "breath"), breathClips, "breath"),
+            };
 
-            if (Directory.Exists(startFolder))
+            foreach (var (folder, collection, category) in clips)
             {
-                LoadAudioFromFolder(startFolder, startMoans, "start");
-            }
+                if (!Directory.Exists(folder)) continue;
 
-            if (Directory.Exists(whileFolder))
-            {
-                LoadAudioFromFolder(whileFolder, whileMoans, "while");
-            }
-
-            if (Directory.Exists(endFolder))
-            {
-                LoadAudioFromFolder(endFolder, endMoans, "end");
-            }
-
-            if (Directory.Exists(sexFolder))
-            {
-                LoadAudioFromFolder(sexFolder, sexMoans, "sex");
-            }
-
-            if (Directory.Exists(breathFolder))
-            {
-                LoadAudioFromFolder(breathFolder, breathClips, "breath");
+                LoadAudioFromFolder(folder, collection, category);
             }
 
             if (whileMoans.Count == 0)
-            {
                 throw new Exception("No audio files found in 'cumming/while' folder - this is required!");
-            }
         }
 
         private void LoadAudioFromFolder(string folderPath, List<MoanClip> targetList, string category)
@@ -224,7 +206,6 @@ namespace MoanMod
 
             int index = random.Next(0, startMoans.Count);
             MoanClip moan = startMoans[index];
-
             float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
             soundManager.Play(moan.Clip, gameSfxVolume, null);
             lastPlayedMoan = moan;

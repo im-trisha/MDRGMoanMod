@@ -4,6 +4,7 @@ using System.IO;
 using MelonLoader.Utils;
 using System.Reflection;
 using System.Linq;
+using MoanMod.PopupService;
 
 [assembly: MelonInfo(typeof(MoanMod.MoanMod), "Moan Mod", "1.4.2-pre", "IkariDev")]
 [assembly: MelonGame("IncontinentCell", "My Dystopian Robot Girlfriend")]
@@ -13,7 +14,7 @@ namespace MoanMod
     public class MoanMod : MelonMod
     {
         // Cached mod version (read once in OnInitializeMelon)
-        private static string modVersion = null;
+        private SemanticVersion modVersion = null;
         private Il2Cpp.ModelBrain brain;
         private AudioPlayer audioPlayer;
 
@@ -66,14 +67,10 @@ namespace MoanMod
         private MelonPreferences_Entry<bool> prefAskedAboutUpdateChecking;
         private MelonPreferences_Entry<long> prefLastUpdateCheckTime;
 
-        private bool isShowingNoticePopup = false;
-        private bool isShowingPreferenceDialog = false;
-        private bool isShowingUpdatePopup = false;
-        private bool userHasAnsweredPreference = false;
-        private bool noticeDismissed = false;
         private const float UPDATE_CHECK_COOLDOWN = 1800f; // 30 minutes
-        private bool updateCheckCompleted = false;
         private UpdateChecker updateChecker = new UpdateChecker();
+        private IPopupService popupService { get; } = new OverlayPopupService();
+
 
         public override void OnInitializeMelon()
         {
@@ -81,29 +78,18 @@ namespace MoanMod
             string gameVersion = Application.version;
             MelonLogger.Msg($"Game Version: {gameVersion}");
 
-            // Cache mod version once at startup
-            if (modVersion == null)
-            {
-                modVersion = GetModVersionFromAssembly();
-            }
+            modVersion = GetModVersionFromAssembly();
 
             // Setup preferences
             prefCategory = MelonPreferences.CreateCategory("MoanMod");
+            prefCategory.ResetFilePath();
             prefNoticePopupShown = prefCategory.CreateEntry("NoticePopupShown", false, "Notice popup has been shown");
             prefUpdateCheckingEnabled = prefCategory.CreateEntry("UpdateCheckingEnabled", true, "Enable automatic update checking");
             prefAskedAboutUpdateChecking = prefCategory.CreateEntry("AskedAboutUpdateChecking", false, "User has been asked about update checking preference");
             prefLastUpdateCheckTime = prefCategory.CreateEntry("LastUpdateCheckTime", 0L, "Timestamp of last update check (ticks)");
             MelonPreferences.Save();
 
-            // extract major version like "0.90" from "0.90.16"
-            string[] versionParts = gameVersion.Split('.');
-            string majorVersion = "";
-            if (versionParts.Length >= 2)
-            {
-                majorVersion = $"{versionParts[0]}.{versionParts[1]}";
-            }
-
-            if (majorVersion != MoanModConfig.ExpectedGameVersion)
+            if (!modVersion.MajorMinorEquals(MoanModConfig.ExpectedGameVersion))
             {
                 MelonLogger.Warning("================================================================================");
                 MelonLogger.Warning("==================== !!! VERSION MISMATCH WARNING !!! =========================");
@@ -128,77 +114,53 @@ namespace MoanMod
             {
                 MelonLogger.Error($"Failed to load audio files: {ex.Message}");
             }
+
+        }
+
+        public override void OnSceneWasInitialized(int buildIndex, string sceneName)
+        {
+            if (sceneName != "MainScene") return;
+            MelonCoroutines.Start(MaybeShowPopups());
+        }
+
+        public System.Collections.IEnumerator MaybeShowPopups()
+        {
+            // Wait for menu to show, so we show when actually needed
+            Func<bool> menuNotLoaded = () => UnityEngine.Object.FindObjectOfType<Il2Cpp.MenuStaticGui>() is null;
+            yield return new WaitWhile(menuNotLoaded);
+
+            var isShowingNoticePopup = true;
+
+            if (!prefNoticePopupShown.Value)
+            {
+                ShowNoticePopup(() => isShowingNoticePopup = false);
+                yield return new WaitWhile((Func<bool>)(() => isShowingNoticePopup));
+            }
+
+            var showingUpdatePreference = true;
+            if (!prefAskedAboutUpdateChecking.Value)
+            {
+                ShowUpdatePreferenceDialog(() => showingUpdatePreference = false);
+                yield return new WaitWhile((Func<bool>)(() => showingUpdatePreference));
+            }
+
+
+            if (!prefUpdateCheckingEnabled.Value) yield break;
+
+            long lastCheckTicks = prefLastUpdateCheckTime.Value;
+            long currentTicks = DateTime.UtcNow.Ticks;
+            double secondsSinceLastCheck = (currentTicks - lastCheckTicks) / 10000000.0;
+
+            if (secondsSinceLastCheck <= UPDATE_CHECK_COOLDOWN) yield break;
+            
+            prefLastUpdateCheckTime.Value = currentTicks;
+            MelonPreferences.Save();
+            yield return updateChecker.CheckForUpdatesCoroutine(modVersion);
         }
 
         public override void OnUpdate()
         {
             audioPlayer.UpdateSoundManager();
-
-            if (!prefNoticePopupShown.Value)
-            {
-                var menuGui = UnityEngine.Object.FindObjectOfType<Il2Cpp.MenuStaticGui>();
-                if (menuGui != null && !isShowingNoticePopup)
-                {
-                    var uiOverlay = UnityEngine.Object.FindObjectOfType<Il2Cpp.UiOverlay>();
-                    if (uiOverlay != null)
-                    {
-                        ShowNoticePopup();
-                        prefNoticePopupShown.Value = true;
-                        MelonPreferences.Save();
-                        isShowingNoticePopup = true;
-                        noticeDismissed = false;
-                    }
-                }
-            }
-            else if (noticeDismissed && !prefAskedAboutUpdateChecking.Value && !isShowingPreferenceDialog)
-            {
-                var menuGui = UnityEngine.Object.FindObjectOfType<Il2Cpp.MenuStaticGui>();
-                if (menuGui != null)
-                {
-                    var uiOverlay = UnityEngine.Object.FindObjectOfType<Il2Cpp.UiOverlay>();
-                    if (uiOverlay != null)
-                    {
-                        ShowUpdatePreferenceDialog();
-                        prefAskedAboutUpdateChecking.Value = true;
-                        MelonPreferences.Save();
-                        isShowingPreferenceDialog = true;
-                        userHasAnsweredPreference = false;
-                    }
-                }
-            }
-            else if (userHasAnsweredPreference && prefUpdateCheckingEnabled.Value && !updateCheckCompleted && !isShowingUpdatePopup)
-            {
-                long lastCheckTicks = prefLastUpdateCheckTime.Value;
-                long currentTicks = System.DateTime.UtcNow.Ticks;
-                double secondsSinceLastCheck = (currentTicks - lastCheckTicks) / 10000000.0;
-
-                if (secondsSinceLastCheck >= UPDATE_CHECK_COOLDOWN)
-                {
-                    updateChecker.StartCheck(modVersion);
-                    prefLastUpdateCheckTime.Value = currentTicks;
-                    MelonPreferences.Save();
-                }
-
-                updateChecker.Update();
-
-                if (updateChecker.IsCheckComplete)
-                {
-                    updateCheckCompleted = true;
-                }
-            }
-            else if (updateChecker.UpdateReleaseUrl != null && !isShowingUpdatePopup)
-            {
-                var menuGui = UnityEngine.Object.FindObjectOfType<Il2Cpp.MenuStaticGui>();
-                if (menuGui != null)
-                {
-                    var uiOverlay = UnityEngine.Object.FindObjectOfType<Il2Cpp.UiOverlay>();
-                    if (uiOverlay != null)
-                    {
-                        ShowUpdatePopup();
-                        isShowingUpdatePopup = true;
-                    }
-                }
-            }
 
             if (brain == null)
             {
@@ -211,6 +173,11 @@ namespace MoanMod
                 return;
             }
 
+            MaybeHandleSex();
+        }
+
+        private void MaybeHandleSex()
+        {
             bool inSexScene = IsInSexScene();
             if (inSexScene && !wasInSexScene)
             {
@@ -295,10 +262,8 @@ namespace MoanMod
 
             UpdateBreathSystem();
 
-            if (!inSexScene || sexSceneStartCooldown > 0f)
-            {
-                return;
-            }
+            if (!inSexScene || sexSceneStartCooldown > 0f) return;
+            
 
             pleasureLogTimer -= Time.deltaTime;
             if (pleasureLogTimer <= 0f)
@@ -823,99 +788,48 @@ namespace MoanMod
             }
         }
 
-        private void ShowNoticePopup()
+        private void ShowNoticePopup(Action dismissCallback = null)
         {
-            var uiOverlay = UnityEngine.Object.FindObjectOfType<Il2Cpp.UiOverlay>();
-            if (uiOverlay == null)
-            {
-                return;
-            }
-
             string title = "MoanMod - Notice";
             string message = "This is the first public release of MoanMod, please be aware that this didn't get thorough testing yet. Please report any bugs via github issues or to IkariDev on discord. You are also welcome to create PR's and make this mod better!\n\nHave fun!";
 
-            uiOverlay.OkPopup(title, message, new System.Action(() =>
-            {
-                noticeDismissed = true;
-            }));
+            popupService.SimplePopup(title, message, dismissCallback);
+            prefNoticePopupShown.Value = true;
+            MelonPreferences.Save();
         }
 
-        private void ShowUpdatePreferenceDialog()
+        private void ShowUpdatePreferenceDialog(Action onDismiss = null)
         {
-            var uiOverlay = UnityEngine.Object.FindObjectOfType<Il2Cpp.UiOverlay>();
-            if (uiOverlay == null)
-            {
-                return;
-            }
-
             string title = "MoanMod - Update Notifications";
             string message = "Would you like to enable automatic update checking for MoanMod? This will notify you when new versions are available.\n\n(This will call the Github API every start of the game with a 30 minute cooldown.)";
 
-            var choices = new Il2CppSystem.Collections.Generic.List<Il2Cpp.PopupChoice>();
-            choices.Add(new Il2Cpp.PopupChoice("Enable", new System.Action(() =>
+            var choices = new[]
             {
-                prefUpdateCheckingEnabled.Value = true;
-                MelonPreferences.Save();
-                userHasAnsweredPreference = true;
-            })));
-            choices.Add(new Il2Cpp.PopupChoice("Disable", new System.Action(() =>
-            {
-                prefUpdateCheckingEnabled.Value = false;
-                MelonPreferences.Save();
-                userHasAnsweredPreference = true;
-            })));
+                new PopupChoice("Enable", () => {
+                    prefUpdateCheckingEnabled.Value = true;
+                    MelonPreferences.Save();
+                    onDismiss?.Invoke();
+                }),
+                new PopupChoice("Disable", () => { 
+                    prefUpdateCheckingEnabled.Value = false;
+                    MelonPreferences.Save();
+                    onDismiss?.Invoke();
+                }),
+            };
 
-            uiOverlay.Popup(title, message, choices);
+            popupService.ChoicePopup(title, message, choices);
+            prefAskedAboutUpdateChecking.Value = true;
+            MelonPreferences.Save();
         }
 
-        private string GetModVersionFromAssembly()
+        private SemanticVersion GetModVersionFromAssembly()
         {
             var assembly = Assembly.GetExecutingAssembly();
             var melonInfoAttr = assembly.GetCustomAttributes(typeof(MelonInfoAttribute), false).FirstOrDefault() as MelonInfoAttribute;
 
-            if (melonInfoAttr != null && !string.IsNullOrEmpty(melonInfoAttr.Version))
-            {
-                return melonInfoAttr.Version;
-            }
+            if (melonInfoAttr?.Version == null) MelonLogger.Error("Failed to read mod version from MelonInfo");
 
-            MelonLogger.Error("Failed to read mod version from MelonInfo");
-            throw new System.Exception("Cannot determine mod version");
-        }
-
-        private void ShowUpdatePopup()
-        {
-            var uiOverlay = UnityEngine.Object.FindObjectOfType<Il2Cpp.UiOverlay>();
-            if (uiOverlay == null || string.IsNullOrEmpty(updateChecker.UpdateReleaseUrl))
-            {
-                return;
-            }
-
-            var releases = updateChecker.CachedReleases;
-            string updateMessage = UpdateChecker.GetUpdateMessage(modVersion, releases);
-
-            var choices = new Il2CppSystem.Collections.Generic.List<Il2Cpp.PopupChoice>();
-            choices.Add(new Il2Cpp.PopupChoice("Skip", (Action)(() => { })));
-            choices.Add(new Il2Cpp.PopupChoice("Open in Browser", (Action)(() => OpenUrlInBrowser(updateChecker.UpdateReleaseUrl))));
-            choices.Add(new Il2Cpp.PopupChoice("Disable Notifications", (Action)(() =>
-            {
-                prefUpdateCheckingEnabled.Value = false;
-                MelonPreferences.Save();
-            })));
-
-            uiOverlay.Popup("MoanMod - Update Available", updateMessage, choices);
-        }
-
-        private void OpenUrlInBrowser(string url)
-        {
-            if (string.IsNullOrEmpty(url)) return;
-            try
-            {
-                Application.OpenURL(url);
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"Failed to open browser: {ex.Message}");
-            }
+            return new SemanticVersion(melonInfoAttr?.Version);
         }
     }
 }

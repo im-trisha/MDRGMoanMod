@@ -93,7 +93,7 @@
     public static class MoanModConfig
     {
         // Game version
-        public const string ExpectedGameVersion = "0.95";
+        public static readonly SemanticVersion ExpectedGameVersion = new SemanticVersion(0, 95, 0);
 
         // Mouth animation
         public static readonly FloatRange MouthOpen = new(min: 0.4f, max: 0.8f);
