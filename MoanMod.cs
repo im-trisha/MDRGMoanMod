@@ -1,10 +1,9 @@
 ﻿using MelonLoader;
 using UnityEngine;
-using System.IO;
 using MelonLoader.Utils;
 using System.Reflection;
-using System.Linq;
 using MoanMod.PopupService;
+using MoanMod.MoanModPreferences;
 
 [assembly: MelonInfo(typeof(MoanMod.MoanMod), "Moan Mod", "1.4.2-pre", "IkariDev")]
 [assembly: MelonGame("IncontinentCell", "My Dystopian Robot Girlfriend")]
@@ -61,13 +60,7 @@ namespace MoanMod
         private float postBreathDelay = 0f;
         private string pendingMoanType = "";
 
-        private MelonPreferences_Category prefCategory;
-        private MelonPreferences_Entry<bool> prefNoticePopupShown;
-        private MelonPreferences_Entry<bool> prefUpdateCheckingEnabled;
-        private MelonPreferences_Entry<bool> prefAskedAboutUpdateChecking;
-        private MelonPreferences_Entry<long> prefLastUpdateCheckTime;
-
-        private const float UPDATE_CHECK_COOLDOWN = 1800f; // 30 minutes
+        private IMoanModPreferences modPreferences = MelonMoanModPreferences.Instance;
         private UpdateChecker updateChecker = new UpdateChecker();
         private IPopupService popupService { get; } = new OverlayPopupService();
 
@@ -79,15 +72,7 @@ namespace MoanMod
             MelonLogger.Msg($"Game Version: {gameVersion}");
 
             modVersion = GetModVersionFromAssembly();
-
-            // Setup preferences
-            prefCategory = MelonPreferences.CreateCategory("MoanMod");
-            prefCategory.ResetFilePath();
-            prefNoticePopupShown = prefCategory.CreateEntry("NoticePopupShown", false, "Notice popup has been shown");
-            prefUpdateCheckingEnabled = prefCategory.CreateEntry("UpdateCheckingEnabled", true, "Enable automatic update checking");
-            prefAskedAboutUpdateChecking = prefCategory.CreateEntry("AskedAboutUpdateChecking", false, "User has been asked about update checking preference");
-            prefLastUpdateCheckTime = prefCategory.CreateEntry("LastUpdateCheckTime", 0L, "Timestamp of last update check (ticks)");
-            MelonPreferences.Save();
+            modPreferences.Initialize();
 
             if (!modVersion.MajorMinorEquals(MoanModConfig.ExpectedGameVersion))
             {
@@ -131,30 +116,21 @@ namespace MoanMod
 
             var isShowingNoticePopup = true;
 
-            if (!prefNoticePopupShown.Value)
+            if (!modPreferences.NoticePopupShown)
             {
                 ShowNoticePopup(() => isShowingNoticePopup = false);
                 yield return new WaitWhile((Func<bool>)(() => isShowingNoticePopup));
             }
 
             var showingUpdatePreference = true;
-            if (!prefAskedAboutUpdateChecking.Value)
+            if (!modPreferences.UpdateCheckingPopupShown)
             {
                 ShowUpdatePreferenceDialog(() => showingUpdatePreference = false);
                 yield return new WaitWhile((Func<bool>)(() => showingUpdatePreference));
             }
 
+            if (!modPreferences.UpdateCheckingEnabled) yield break;
 
-            if (!prefUpdateCheckingEnabled.Value) yield break;
-
-            long lastCheckTicks = prefLastUpdateCheckTime.Value;
-            long currentTicks = DateTime.UtcNow.Ticks;
-            double secondsSinceLastCheck = (currentTicks - lastCheckTicks) / 10000000.0;
-
-            if (secondsSinceLastCheck <= UPDATE_CHECK_COOLDOWN) yield break;
-            
-            prefLastUpdateCheckTime.Value = currentTicks;
-            MelonPreferences.Save();
             yield return updateChecker.CheckForUpdatesCoroutine(modVersion);
         }
 
@@ -794,8 +770,7 @@ namespace MoanMod
             string message = "This is the first public release of MoanMod, please be aware that this didn't get thorough testing yet. Please report any bugs via github issues or to IkariDev on discord. You are also welcome to create PR's and make this mod better!\n\nHave fun!";
 
             popupService.SimplePopup(title, message, dismissCallback);
-            prefNoticePopupShown.Value = true;
-            MelonPreferences.Save();
+            modPreferences.NoticePopupShown = true;
         }
 
         private void ShowUpdatePreferenceDialog(Action onDismiss = null)
@@ -806,20 +781,17 @@ namespace MoanMod
             var choices = new[]
             {
                 new PopupChoice("Enable", () => {
-                    prefUpdateCheckingEnabled.Value = true;
-                    MelonPreferences.Save();
+                    modPreferences.UpdateCheckingEnabled = true;
                     onDismiss?.Invoke();
                 }),
-                new PopupChoice("Disable", () => { 
-                    prefUpdateCheckingEnabled.Value = false;
-                    MelonPreferences.Save();
+                new PopupChoice("Disable", () => {
+                    modPreferences.UpdateCheckingEnabled = false;
                     onDismiss?.Invoke();
                 }),
             };
 
             popupService.ChoicePopup(title, message, choices);
-            prefAskedAboutUpdateChecking.Value = true;
-            MelonPreferences.Save();
+            modPreferences.UpdateCheckingPopupShown = true;
         }
 
         private SemanticVersion GetModVersionFromAssembly()

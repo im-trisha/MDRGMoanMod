@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections;
-using System.Linq;
+﻿using System.Collections;
 using System.Text.Json;
 using MelonLoader;
-using Microsoft.VisualBasic;
+using MoanMod.MoanModPreferences;
 using MoanMod.PopupService;
+using UnityEngine;
 using UnityEngine.Networking;
 
 namespace MoanMod
@@ -20,14 +19,21 @@ namespace MoanMod
     public class UpdateChecker
     {
         private bool isCheckingForUpdates = false;
-        private string updateReleaseUrl = null;
-        private string currentVersion = null;
+        private const float UPDATE_CHECK_COOLDOWN = 1800f; // 30 minutes
 
         private IPopupService popupService = new OverlayPopupService();
+        private IMoanModPreferences modPreferences = MelonMoanModPreferences.Instance;
 
         public IEnumerator CheckForUpdatesCoroutine(SemanticVersion version)
         {
-            if (isCheckingForUpdates) yield break;
+            var currentTicks = DateTime.UtcNow.Ticks;
+            var ticksSinceLast = currentTicks - modPreferences.LastUpdateCheckTime;
+            var secondsSinceLastCheck = ticksSinceLast / 10000000.0;
+
+            if (isCheckingForUpdates || secondsSinceLastCheck <= UPDATE_CHECK_COOLDOWN) yield break;
+
+
+            modPreferences.LastUpdateCheckTime = currentTicks;
             var githubRequest = UnityWebRequest.Get("https://api.github.com/repos/IkariDevGIT/MDRGMoanMod/releases?per_page=10");
             githubRequest.downloadHandler = new DownloadHandlerBuffer();
         
@@ -43,60 +49,30 @@ namespace MoanMod
             string json = githubRequest.downloadHandler.text;
             var releases = ParseGitHubReleasesJson(json);
 
-            string updateMessage = GetUpdateMessage(currentVersion, releases);
-            if (string.IsNullOrEmpty(updateMessage))
-            {
-                MelonLogger.Error()
-            }
-                updateReleaseUrl = GetLatestReleaseUrl(currentVersion, releases);
+            MaybeSendPopup(version, releases);
         }
 
-        public static string GetLatestReleaseUrl(string currentVersionStr, List<GitHubRelease> releases)
+        public void MaybeSendPopup(SemanticVersion currentVersion, IList<GitHubRelease> releases)
         {
-            try
-            {
-                var currentVersion = new SemanticVersion(currentVersionStr);
-                var suggestedRelease = FindSuggestedRelease(currentVersion, releases);
-
-                if (suggestedRelease != null)
-                {
-                    return suggestedRelease.HtmlUrl;
-                }
-            }
-            catch (Exception) { }
-
-            return null;
-        }
-
-        public static string GetUpdateMessage(string currentVersionStr, List<GitHubRelease> releases)
-        {
-            try
-            {
-                var currentVersion = new SemanticVersion(currentVersionStr);
-                var suggestedRelease = FindSuggestedRelease(currentVersion, releases);
-
-                if (suggestedRelease != null && suggestedRelease.Version > currentVersion)
-                {
-                    return $"Your version \"{currentVersionStr}\" is outdated, get {suggestedRelease.Version} on github.";
-                }
-            }
-            catch (Exception) { }
-
-            return null;
-        }
-
-        private static GitHubRelease FindSuggestedRelease(SemanticVersion currentVersion, List<GitHubRelease> releases)
-        {
-            if (releases == null || releases.Count == 0) return null;
-
-            return releases
+            var suggestedRelease = releases
                 .Where(r => r.Version > currentVersion)
                 .Where(r => currentVersion.IsPrerelease || !r.Version.IsPrerelease) // If stable, ignore pre-releases
                 .OrderByDescending(r => r.Version)
                 .FirstOrDefault();
+
+            if (suggestedRelease == null || suggestedRelease.Version <= currentVersion) return;
+
+            var choices = new[] {
+                new PopupChoice("Skip", () => { }),
+                new PopupChoice("Open in Browser", () => OpenUrlInBrowser(suggestedRelease.HtmlUrl)),
+                new PopupChoice("Disable Notifications", () => modPreferences.UpdateCheckingEnabled = false)
+            };
+
+            var updateMessage = $"Your version \"{currentVersion}\" is outdated, get {suggestedRelease.Version} on github.";
+            popupService.ChoicePopup("MoanMod - Update Available", updateMessage, choices);
         }
 
-        private List<GitHubRelease> ParseGitHubReleasesJson(string json)
+        private IList<GitHubRelease> ParseGitHubReleasesJson(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return new List<GitHubRelease>();
 
@@ -106,7 +82,7 @@ namespace MoanMod
                 if (doc.RootElement.ValueKind != JsonValueKind.Array) return new List<GitHubRelease>();
 
                 return doc.RootElement.EnumerateArray()
-                    .Select(element => CreateReleaseFromElement(element))
+                    .Select(CreateReleaseFromElement)
                     .Where(release => release != null)
                     .ToList();
             }
@@ -135,35 +111,12 @@ namespace MoanMod
             };
         }
 
-        private void ShowUpdatePopup()
-        {
-            var releases = updateChecker.CachedReleases;
-            string updateMessage = UpdateChecker.GetUpdateMessage(modVersion, releases);
-
-            var choices = new[] {
-                new PopupChoice("Skip", () => { }),
-                new PopupChoice("Open in Browser", () => OpenUrlInBrowser(updateChecker.UpdateReleaseUrl)),
-                new PopupChoice("Disable Notifications", () =>
-                {
-                    prefUpdateCheckingEnabled.Value = false;
-                    MelonPreferences.Save();
-                })
-            };
-
-            uiOverlay.Popup("MoanMod - Update Available", updateMessage, choices);
-        }
-
         private void OpenUrlInBrowser(string url)
         {
             if (string.IsNullOrEmpty(url)) return;
-            try
-            {
-                Application.OpenURL(url);
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"Failed to open browser: {ex.Message}");
-            }
+
+            try { Application.OpenURL(url); }
+            catch (Exception ex) { MelonLogger.Error($"Failed to open browser: {ex.Message}"); }
         }
     }
 }

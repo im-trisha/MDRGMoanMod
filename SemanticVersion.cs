@@ -52,7 +52,7 @@ namespace MoanMod
         {
             try
             {
-                result = SemanticVersion(versionString);
+                result = new SemanticVersion(versionString);
                 return true;
             }
             catch (Exception)
