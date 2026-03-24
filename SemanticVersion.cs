@@ -7,7 +7,7 @@ namespace MoanMod
     /// </summary>
     public class SemanticVersion : IComparable<SemanticVersion>
     {
-        private static readonly Regex _s_SemVerRegex = new Regex(
+        private static readonly Regex s_SemVerRegex = new Regex(
             @"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$",
             RegexOptions.Compiled
         );

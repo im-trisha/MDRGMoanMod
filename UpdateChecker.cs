@@ -18,22 +18,22 @@ namespace MoanMod
 
     public class UpdateChecker
     {
-        private bool isCheckingForUpdates = false;
-        private const float UPDATE_CHECK_COOLDOWN = 1800f; // 30 minutes
+        private bool _isCheckingForUpdates = false;
+        private const float UpdateCheckCooldown = 1800f; // 30 minutes
 
-        private IPopupService popupService = new OverlayPopupService();
-        private IMoanModPreferences modPreferences = MelonMoanModPreferences.Instance;
+        private readonly IPopupService _popupService = new OverlayPopupService();
+        private readonly IMoanModPreferences _modPreferences = MelonMoanModPreferences.Instance;
 
         public IEnumerator CheckForUpdatesCoroutine(SemanticVersion version)
         {
             var currentTicks = DateTime.UtcNow.Ticks;
-            var ticksSinceLast = currentTicks - modPreferences.LastUpdateCheckTime;
+            var ticksSinceLast = currentTicks - _modPreferences.LastUpdateCheckTime;
             var secondsSinceLastCheck = ticksSinceLast / 10000000.0;
 
-            if (isCheckingForUpdates || secondsSinceLastCheck <= UPDATE_CHECK_COOLDOWN) yield break;
+            if (_isCheckingForUpdates || secondsSinceLastCheck <= UpdateCheckCooldown) yield break;
 
 
-            modPreferences.LastUpdateCheckTime = currentTicks;
+            _modPreferences.LastUpdateCheckTime = currentTicks;
             var githubRequest = UnityWebRequest.Get("https://api.github.com/repos/IkariDevGIT/MDRGMoanMod/releases?per_page=10");
             githubRequest.downloadHandler = new DownloadHandlerBuffer();
         
@@ -42,7 +42,7 @@ namespace MoanMod
             if (githubRequest.result != UnityWebRequest.Result.Success)
             {
                 MelonLogger.Error($"Failed to fetch releases: {githubRequest.error}");
-                isCheckingForUpdates = false;
+                _isCheckingForUpdates = false;
                 yield break;
             }
             
@@ -65,11 +65,11 @@ namespace MoanMod
             var choices = new[] {
                 new PopupChoice("Skip", () => { }),
                 new PopupChoice("Open in Browser", () => OpenUrlInBrowser(suggestedRelease.HtmlUrl)),
-                new PopupChoice("Disable Notifications", () => modPreferences.UpdateCheckingEnabled = false)
+                new PopupChoice("Disable Notifications", () => _modPreferences.UpdateCheckingEnabled = false)
             };
 
             var updateMessage = $"Your version \"{currentVersion}\" is outdated, get {suggestedRelease.Version} on github.";
-            popupService.ChoicePopup("MoanMod - Update Available", updateMessage, choices);
+            _popupService.ChoicePopup("MoanMod - Update Available", updateMessage, choices);
         }
 
         private IList<GitHubRelease> ParseGitHubReleasesJson(string json)

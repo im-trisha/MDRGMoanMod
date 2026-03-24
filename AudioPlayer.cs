@@ -37,59 +37,16 @@ namespace MoanMod
         public bool HasSexMoans => sexMoans.Count > 0;
         public bool HasBreaths => breathClips.Count > 0;
 
-        public float GetLastPlayedClipLength()
-        {
-            if (lastPlayedMoan != null && lastPlayedMoan.Clip != null)
-            {
-                return lastPlayedMoan.Clip.length;
-            }
-            return 0f;
-        }
+        public float GetLastPlayedClipLength() => lastPlayedMoan?.Clip?.length ?? 0f;
 
-        public float GetLastPlayedSexMoanLength()
-        {
-            if (lastPlayedSexMoan != null && lastPlayedSexMoan.Clip != null)
-            {
-                return lastPlayedSexMoan.Clip.length;
-            }
-            return 0f;
-        }
+        public float GetLastPlayedSexMoanLength() => lastPlayedSexMoan?.Clip?.length ?? 0f;
+        public string GetLastPlayedMoanName() => lastPlayedMoan?.Name ?? "Unknown";
 
-        public string GetLastPlayedMoanName()
-        {
-            if (lastPlayedMoan != null)
-            {
-                return lastPlayedMoan.Name;
-            }
-            return "unknown";
-        }
+        public string GetLastPlayedSexMoanName() => lastPlayedSexMoan?.Name ?? "Unknown";
 
-        public string GetLastPlayedSexMoanName()
-        {
-            if (lastPlayedSexMoan != null)
-            {
-                return lastPlayedSexMoan.Name;
-            }
-            return "unknown";
-        }
+        public string GetLastPlayedBreathName() => lastPlayedBreath?.Name ?? "Unknown";
 
-        public string GetLastPlayedBreathName()
-        {
-            if (lastPlayedBreath != null)
-            {
-                return lastPlayedBreath.Name;
-            }
-            return "unknown";
-        }
-
-        public float GetLastPlayedBreathLength()
-        {
-            if (lastPlayedBreath != null && lastPlayedBreath.Clip != null)
-            {
-                return lastPlayedBreath.Clip.length;
-            }
-            return 0f;
-        }
+        public float GetLastPlayedBreathLength() => lastPlayedBreath?.Clip?.length ?? 0f;
 
         public void LoadAllAudioFiles(string modFolder)
         {
@@ -251,26 +208,19 @@ namespace MoanMod
                 }
             }
 
-            if (selectedMoan == null)
+            selectedMoan ??= SelectRandomAvailableSexMoan();
+            if (selectedMoan == null) return;
+            
+            float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
+            soundManager.Play(selectedMoan.Clip, gameSfxVolume, null);
+
+            selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
+            lastPlayedSexMoan = selectedMoan;
+
+            foreach (var moan in sexMoans)
             {
-                selectedMoan = SelectRandomAvailableSexMoan();
-            }
-
-            if (selectedMoan != null)
-            {
-                float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-                soundManager.Play(selectedMoan.Clip, gameSfxVolume, null);
-
-                selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
-                lastPlayedSexMoan = selectedMoan;
-
-                foreach (var moan in sexMoans)
-                {
-                    if (moan != selectedMoan && moan.CooldownCounter > 0)
-                    {
-                        moan.CooldownCounter--;
-                    }
-                }
+                if (moan != selectedMoan && moan.CooldownCounter > 0)
+                    moan.CooldownCounter--;
             }
         }
 
@@ -304,26 +254,19 @@ namespace MoanMod
                 }
             }
 
-            if (selectedMoan == null)
+            selectedMoan ??= SelectRandomAvailableMoan();
+            if (selectedMoan == null) return;
+            
+            float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
+            soundManager.Play(selectedMoan.Clip, gameSfxVolume, null);
+
+            selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
+            lastPlayedMoan = selectedMoan;
+
+            foreach (var moan in whileMoans)
             {
-                selectedMoan = SelectRandomAvailableMoan();
-            }
-
-            if (selectedMoan != null)
-            {
-                float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-                soundManager.Play(selectedMoan.Clip, gameSfxVolume, null);
-
-                selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
-                lastPlayedMoan = selectedMoan;
-
-                foreach (var moan in whileMoans)
-                {
-                    if (moan != selectedMoan && moan.CooldownCounter > 0)
-                    {
-                        moan.CooldownCounter--;
-                    }
-                }
+                if (moan != selectedMoan && moan.CooldownCounter > 0)
+                    moan.CooldownCounter--;
             }
         }
 
@@ -346,18 +289,16 @@ namespace MoanMod
         public void ResetCooldowns()
         {
             foreach (var moan in whileMoans)
-            {
                 moan.CooldownCounter = 0;
-            }
+
             lastPlayedMoan = null;
         }
 
         public void ResetSexMoanCooldowns()
         {
             foreach (var moan in sexMoans)
-            {
                 moan.CooldownCounter = 0;
-            }
+            
             lastPlayedSexMoan = null;
         }
 
