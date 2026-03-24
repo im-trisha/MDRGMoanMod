@@ -278,7 +278,7 @@ public class MoanMod : MelonMod
                 requiredChange *= MoanModConfig.Modifiers.CowgirlMultiplier;
             }
 
-            if (pleasureChange > requiredChange && !(brain.ConnectedController?.Expression?.IsCumming ?? false) && sexMoanTimer <= 0f && !isInCluster && !pendingEndMoan && !playingEndMoan && audioPlayer.HasSexMoans)
+            if (pleasureChange > requiredChange && !(brain.ConnectedController?.Expression?.IsCumming ?? false) && sexMoanTimer <= 0f && !isInCluster && !pendingEndMoan && !playingEndMoan && audioPlayer.HasAudioFor(AudioType.Sex))
             {
                 if (!brain.IsTalkingWithOverlay)
                 {
@@ -367,7 +367,7 @@ public class MoanMod : MelonMod
             {
                 audioPlayer.PlayEndMoan(1.0f);
 
-                float endClipLength = audioPlayer.GetLastPlayedClipLength();
+                float endClipLength = audioPlayer.LastPlayedLengthFor(AudioType.CumEnd);
                 if (endClipLength > 0f)
                 {
                     currentMouthOpenAmount = UnityEngine.Random.Range(MoanModConfig.MouthOpen.Min, MoanModConfig.MouthOpen.Max);
@@ -381,7 +381,7 @@ public class MoanMod : MelonMod
             }
         }
 
-        if (isCumming && audioPlayer.HasAudio)
+        if (isCumming && audioPlayer.HasAudioFor(AudioType.CumWhile))
         {
             moanTimer -= Time.deltaTime;
 
@@ -469,7 +469,7 @@ public class MoanMod : MelonMod
 
         audioPlayer.PlayStartMoan(1.0f);
         AddMoanTimestamp();
-        float startClipLength = audioPlayer.GetLastPlayedClipLength();
+        float startClipLength = audioPlayer.LastPlayedLengthFor(AudioType.CumStart);
 
         if (startClipLength > 0f)
         {
@@ -480,14 +480,14 @@ public class MoanMod : MelonMod
             MelonLogger.Msg($"Playing start moan! Length: {startClipLength:F2}s, Mouth: {currentMouthOpenAmount:F2}");
         }
 
-        audioPlayer.ResetCooldowns();
+        audioPlayer.ResetCooldownsFor(AudioType.CumWhile);
         moanTimer = startClipLength;
     }
 
     private void OnCummingEnd()
     {
         MelonLogger.Msg("=== Cumming Ended ===");
-        audioPlayer.ResetCooldowns();
+        audioPlayer.ResetCooldownsFor(AudioType.CumWhile);
 
         if (moanTimer > 0f)
         {
@@ -499,7 +499,7 @@ public class MoanMod : MelonMod
         {
             audioPlayer.PlayEndMoan(1.0f);
 
-            float endClipLength = audioPlayer.GetLastPlayedClipLength();
+            float endClipLength = audioPlayer.LastPlayedLengthFor(AudioType.CumEnd);
             if (endClipLength > 0f)
             {
                 currentMouthOpenAmount = UnityEngine.Random.Range(MoanModConfig.MouthOpen.Min, MoanModConfig.MouthOpen.Max);
@@ -623,8 +623,8 @@ public class MoanMod : MelonMod
         currentMouthOpenAmount = UnityEngine.Random.Range(MoanModConfig.MouthOpen.Min, MoanModConfig.MouthOpen.Max);
         shouldMouthBeOpen = true;
 
-        float clipLength = audioPlayer.GetLastPlayedSexMoanLength();
-        string clipName = audioPlayer.GetLastPlayedSexMoanName();
+        float clipLength = audioPlayer.LastPlayedLengthFor(AudioType.Sex);
+        string clipName = audioPlayer.LastPlayedNameFor(AudioType.Sex);
 
         ApplyMoanExpressions(clipLength);
 
@@ -677,7 +677,7 @@ public class MoanMod : MelonMod
 
     private bool ShouldBreatheBeforeMoan()
     {
-        if (!audioPlayer.HasBreaths) return false;
+        if (!audioPlayer.HasAudioFor(AudioType.Breath)) return false;
         if (lastActionWasBreath) return false;
         if (brain.IsTalkingWithOverlay) return false;
 
@@ -704,7 +704,7 @@ public class MoanMod : MelonMod
         shouldMouthBeOpen = true;
         mouthCloseTimer = breathLength;
 
-        string breathName = audioPlayer.GetLastPlayedBreathName();
+        string breathName = audioPlayer.LastPlayedNameFor(AudioType.CumEnd);
         int moanCount = GetMoanCountInWindow();
         MelonLogger.Msg($"Breath '{breathName}'! Length: {breathLength:F2}s, Moans in last {MoanModConfig.Breath.MoanTrackingWindow:F1}s: {moanCount}");
     }
@@ -716,8 +716,8 @@ public class MoanMod : MelonMod
         audioPlayer.PlayRandomMoan(1.0f);
         AddMoanTimestamp();
 
-        float clipLength = audioPlayer.GetLastPlayedClipLength();
-        string clipName = audioPlayer.GetLastPlayedMoanName();
+        float clipLength = audioPlayer.LastPlayedLengthFor(AudioType.CumWhile);
+        string clipName = audioPlayer.LastPlayedNameFor(AudioType.CumWhile);
         moanTimer = clipLength + moanCooldown;
 
         ApplyMoanExpressions(clipLength);

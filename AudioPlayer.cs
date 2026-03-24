@@ -1,76 +1,120 @@
-﻿using UnityEngine;
-using System;
-using System.IO;
-using System.Collections.Generic;
-using System.Linq;
+﻿using Il2CppFungus;
+using MelonLoader;
+using UnityEngine;
 
 namespace MoanMod;
+public enum AudioType
+{
+    CumStart,
+    CumWhile,
+    CumEnd,
+    Sex,
+    Breath
+}
+
+class MoanClip
+{
+    public AudioClip Clip { get; init; }
+    public string Name { get; init; }
+    public int CooldownCounter { get; set; }
+
+    public bool IsAvailable => CooldownCounter <= 0;
+}
+
+class ClipCollection
+{
+    public List<MoanClip> Clips { get; } = new();
+    public MoanClip LastPlayed { get; private set; }
+
+    public int Count => Clips.Count;
+    public bool HasAudio => Count > 0;
+
+    public MoanClip SelectNext(System.Random rnd, bool useCooldowns = false)
+    {
+        if (!HasAudio) return null;
+
+        MoanClip selectedMoan = null;
+
+        // Apply repeat chance if cooldowns are enabled and we get lucky
+        var maybeRepeat = useCooldowns && LastPlayed?.IsAvailable == true;
+        if (maybeRepeat && rnd.NextDouble() < MoanModConfig.Cluster.RepeatChance)
+        {
+            selectedMoan = LastPlayed;
+        }
+
+        // If we didn't repeat, pick a random available clip
+        selectedMoan ??= PickAvailable(rnd, useCooldowns);
+
+        LastPlayed = selectedMoan;
+        if (!useCooldowns) return selectedMoan;
+
+
+        selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
+        foreach (var clip in Clips.Where(c => c != selectedMoan && c.CooldownCounter > 0))
+            clip.CooldownCounter -= 1;
+        
+        return selectedMoan;
+    }
+
+    private MoanClip PickAvailable(System.Random rnd, bool useCooldowns)
+    {
+        if (!useCooldowns) return Clips[rnd.Next(Clips.Count)];
+        
+        var available = Clips.Where(c => c.IsAvailable).ToList();
+        if (available.Count == 0)
+        {
+            var leastCooldown = Clips.MinBy(c => c.CooldownCounter)!; // Will never be null because we fail fast in SelectNext if !HasAudio
+            leastCooldown.CooldownCounter = 0;
+            available.Add(leastCooldown);
+        }
+
+        return available[rnd.Next(available.Count)];;
+    }
+
+    public void ResetCooldowns()
+    {
+        foreach (var clip in Clips) clip.CooldownCounter = 0;
+        LastPlayed = null;
+    }
+}
 
 public class AudioPlayer
 {
-    private class MoanClip
-    {
-        public AudioClip Clip { get; set; }
-        public string Name { get; set; }
-        public int CooldownCounter { get; set; }
+    private readonly Dictionary<AudioType, ClipCollection> _audioCollections = new();
+    private  Il2Cpp.SoundSingleton _soundManager;
+    private readonly System.Random _random = new();
 
-        public bool IsAvailable => CooldownCounter == 0;
-    }
-
-    private List<MoanClip> startMoans = new List<MoanClip>();
-    private List<MoanClip> whileMoans = new List<MoanClip>();
-    private List<MoanClip> endMoans = new List<MoanClip>();
-    private List<MoanClip> sexMoans = new List<MoanClip>();
-    private List<MoanClip> breathClips = new List<MoanClip>();
-    private MoanClip lastPlayedMoan = null;
-    private MoanClip lastPlayedSexMoan = null;
-    private MoanClip lastPlayedBreath = null;
-    private Il2Cpp.SoundSingleton soundManager;
-    private System.Random random = new System.Random();
-
-    public int StartMoansCount => startMoans.Count;
-    public int WhileMoansCount => whileMoans.Count;
-    public int EndMoansCount => endMoans.Count;
-    public int SexMoansCount => sexMoans.Count;
-    public int BreathCount => breathClips.Count;
-    public bool HasAudio => whileMoans.Count > 0;
-    public bool HasSexMoans => sexMoans.Count > 0;
-    public bool HasBreaths => breathClips.Count > 0;
-
-    public float GetLastPlayedClipLength() => lastPlayedMoan?.Clip?.length ?? 0f;
-
-    public float GetLastPlayedSexMoanLength() => lastPlayedSexMoan?.Clip?.length ?? 0f;
-    public string GetLastPlayedMoanName() => lastPlayedMoan?.Name ?? "Unknown";
-
-    public string GetLastPlayedSexMoanName() => lastPlayedSexMoan?.Name ?? "Unknown";
-
-    public string GetLastPlayedBreathName() => lastPlayedBreath?.Name ?? "Unknown";
-
-    public float GetLastPlayedBreathLength() => lastPlayedBreath?.Clip?.length ?? 0f;
+    public int GetCountFor(AudioType type) => _audioCollections[type].Count;
+    public bool HasAudioFor(AudioType type) => _audioCollections[type].HasAudio;
+    public float LastPlayedLengthFor(AudioType type) => _audioCollections[type].LastPlayed?.Clip?.length ?? 0;
+    public string LastPlayedNameFor(AudioType type) => _audioCollections[type].LastPlayed?.Name ?? "Unknown";
 
     public void LoadAllAudioFiles(string modFolder)
     {
-        var clips = new[] {
-            (Path.Combine(modFolder, "cumming", "start"), startMoans, "start"),
-            (Path.Combine(modFolder, "cumming", "while"), whileMoans, "while"),
-            (Path.Combine(modFolder, "cumming", "end"), endMoans, "end"),
-            (Path.Combine(modFolder, "while"), sexMoans, "sex"),
-            (Path.Combine(modFolder, "breath"), breathClips, "breath"),
+
+        var loadingMap = new[]
+        {
+            ( Path.Combine(modFolder, "cumming", "start"), AudioType.CumStart ),
+            ( Path.Combine(modFolder, "cumming", "while"), AudioType.CumWhile ),
+            ( Path.Combine(modFolder, "cumming", "end"), AudioType.CumEnd ),
+            ( Path.Combine(modFolder, "while"), AudioType.Sex ),
+            ( Path.Combine(modFolder, "breath"), AudioType.Breath)
         };
 
-        foreach (var (folder, collection, category) in clips)
+        foreach (var (folder, type) in loadingMap)
         {
-            if (!Directory.Exists(folder)) continue;
-
-            LoadAudioFromFolder(folder, collection, category);
+            LoadAudioFromFolder(folder, type);
         }
 
-        if (whileMoans.Count == 0)
+        if (!_audioCollections[AudioType.CumWhile].HasAudio)
             throw new Exception("No audio files found in 'cumming/while' folder - this is required!");
     }
 
-    private void LoadAudioFromFolder(string folderPath, List<MoanClip> targetList, string category)
+    private void LoadAudioFromFolder(string folderPath, AudioType type)
     {
+        if (!Directory.Exists(folderPath)) return;
+
+        var collection = _audioCollections[type];
         string[] wavFiles = Directory.GetFiles(folderPath, "*.wav");
 
         foreach (string filePath in wavFiles)
@@ -78,7 +122,7 @@ public class AudioPlayer
             try
             {
                 AudioClip clip = LoadWavFile(filePath);
-                targetList.Add(new MoanClip
+                collection.Clips.Add(new MoanClip
                 {
                     Clip = clip,
                     Name = Path.GetFileNameWithoutExtension(filePath),
@@ -87,11 +131,11 @@ public class AudioPlayer
             }
             catch (Exception ex)
             {
-                MelonLoader.MelonLogger.Warning($"Failed to load {category} moan {Path.GetFileName(filePath)}: {ex.Message}");
+                MelonLogger.Warning($"Failed to load {type} moan {Path.GetFileName(filePath)}: {ex.Message}");
             }
         }
 
-        MelonLoader.MelonLogger.Msg($"Loaded {targetList.Count} {category} moans");
+        MelonLogger.Msg($"Loaded {collection.Count} {type} moans");
     }
 
     private AudioClip LoadWavFile(string filePath)
@@ -152,158 +196,33 @@ public class AudioPlayer
 
     public void UpdateSoundManager()
     {
-        if (soundManager is not null) return;
-        
-        soundManager = GameObject.FindObjectOfType<Il2Cpp.SoundSingleton>();
-    }
+        if (_soundManager is not null) return;  
 
-    public void PlayStartMoan(float volume = 1.0f)
+        _soundManager = Il2Cpp.SoundSingleton.Instance;
+    }
+    private float PlayAudioType(AudioType type, bool useCooldowns, float volumeMultiplier = 1.0f)
     {
-        if (soundManager == null || startMoans.Count == 0) return;
+        var collection = _audioCollections[type];
+        var clipToPlay = collection.SelectNext(_random, useCooldowns);
 
-        int index = random.Next(0, startMoans.Count);
-        MoanClip moan = startMoans[index];
-        float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-        soundManager.Play(moan.Clip, gameSfxVolume, null);
-        lastPlayedMoan = moan;
+        if (_soundManager == null || clipToPlay == null) return 0f;
+
+        float finalVolume = Mathf.Clamp01(Il2Cpp.OptionsStatic.SfxVolume * volumeMultiplier);
+        _soundManager.Play(clipToPlay.Clip, finalVolume, null);
+
+        return clipToPlay.Clip.length;
     }
+    public void PlayStartMoan(float volume = 1.0f) => PlayAudioType(AudioType.CumStart, false, volume);
+    public void PlayEndMoan(float volume = 1.0f) => PlayAudioType(AudioType.CumEnd, false, volume);
+    public float PlayBreath() => PlayAudioType(AudioType.Breath, false);
 
-    public void PlayEndMoan(float volume = 1.0f)
-    {
-        if (soundManager == null || endMoans.Count == 0) return;
+    public void PlaySexMoan(float volume = 1.0f) => PlayAudioType(AudioType.Sex, true, volume);
+    public void PlayRandomMoan(float volume = 1.0f) => PlayAudioType(AudioType.CumWhile, true, volume);
 
-        int index = random.Next(0, endMoans.Count);
-        MoanClip moan = endMoans[index];
-
-        float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-        soundManager.Play(moan.Clip, gameSfxVolume, null);
-        lastPlayedMoan = moan;
-    }
-
-    public float PlayBreath()
-    {
-        if (soundManager == null || breathClips.Count == 0) return 0f;
-
-        int index = random.Next(0, breathClips.Count);
-        MoanClip breath = breathClips[index];
-
-        float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-        soundManager.Play(breath.Clip, gameSfxVolume, null);
-        lastPlayedBreath = breath;
-
-        return breath.Clip.length;
-    }
-
-    public void PlaySexMoan(float volume = 1.0f)
-    {
-        if (soundManager == null || sexMoans.Count == 0) return;
-
-        MoanClip selectedMoan = null;
-
-        if (lastPlayedSexMoan != null && random.NextDouble() < MoanModConfig.Cluster.RepeatChance)
-        {
-            if (lastPlayedSexMoan.IsAvailable)
-            {
-                selectedMoan = lastPlayedSexMoan;
-            }
-        }
-
-        selectedMoan ??= SelectRandomAvailableSexMoan();
-        if (selectedMoan == null) return;
-        
-        float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-        soundManager.Play(selectedMoan.Clip, gameSfxVolume, null);
-
-        selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
-        lastPlayedSexMoan = selectedMoan;
-
-        foreach (var moan in sexMoans)
-        {
-            if (moan != selectedMoan && moan.CooldownCounter > 0)
-                moan.CooldownCounter--;
-        }
-    }
-
-    private MoanClip SelectRandomAvailableSexMoan()
-    {
-        var availableMoans = sexMoans.Where(m => m.IsAvailable).ToList();
-
-        // if all on cooldown, free the one with lowest counter
-        if (availableMoans.Count == 0)
-        {
-            var leastCooldown = sexMoans.OrderBy(m => m.CooldownCounter).First();
-            leastCooldown.CooldownCounter = 0;
-            availableMoans.Add(leastCooldown);
-        }
-
-        int index = random.Next(0, availableMoans.Count);
-        return availableMoans[index];
-    }
-
-    public void PlayRandomMoan(float volume = 1.0f)
-    {
-        if (soundManager == null || whileMoans.Count == 0) return;
-
-        MoanClip selectedMoan = null;
-
-        if (lastPlayedMoan != null && random.NextDouble() < MoanModConfig.Cluster.RepeatChance)
-        {
-            if (lastPlayedMoan.IsAvailable)
-            {
-                selectedMoan = lastPlayedMoan;
-            }
-        }
-
-        selectedMoan ??= SelectRandomAvailableMoan();
-        if (selectedMoan == null) return;
-        
-        float gameSfxVolume = Il2Cpp.OptionsStatic.SfxVolume;
-        soundManager.Play(selectedMoan.Clip, gameSfxVolume, null);
-
-        selectedMoan.CooldownCounter = MoanModConfig.Cluster.RepeatCooldown;
-        lastPlayedMoan = selectedMoan;
-
-        foreach (var moan in whileMoans)
-        {
-            if (moan != selectedMoan && moan.CooldownCounter > 0)
-                moan.CooldownCounter--;
-        }
-    }
-
-    private MoanClip SelectRandomAvailableMoan()
-    {
-        var availableMoans = whileMoans.Where(m => m.IsAvailable).ToList();
-
-        // if all on cooldown, free the one with lowest counter
-        if (availableMoans.Count == 0)
-        {
-            var leastCooldown = whileMoans.OrderBy(m => m.CooldownCounter).First();
-            leastCooldown.CooldownCounter = 0;
-            availableMoans.Add(leastCooldown);
-        }
-
-        int index = random.Next(0, availableMoans.Count);
-        return availableMoans[index];
-    }
-
-    public void ResetCooldowns()
-    {
-        foreach (var moan in whileMoans)
-            moan.CooldownCounter = 0;
-
-        lastPlayedMoan = null;
-    }
-
-    public void ResetSexMoanCooldowns()
-    {
-        foreach (var moan in sexMoans)
-            moan.CooldownCounter = 0;
-        
-        lastPlayedSexMoan = null;
-    }
+    public void ResetCooldownsFor(AudioType type) => _audioCollections[type].ResetCooldowns();
 
     public string GetLoadedFilesList()
     {
-        return $"Cumming(Start: {startMoans.Count}, While: {whileMoans.Count}, End: {endMoans.Count}) | Sex: {sexMoans.Count} | Breath: {breathClips.Count}";
+        return $"Cumming(Start: {GetCountFor(AudioType.CumStart)}, While: {GetCountFor(AudioType.CumWhile)}, End: {GetCountFor(AudioType.CumEnd)}) | Sex: {GetCountFor(AudioType.Sex)} | Breath: {GetCountFor(AudioType.Breath)}";
     }
 }
