@@ -84,6 +84,12 @@ public class AudioPlayer
     private  Il2Cpp.SoundSingleton _soundManager;
     private readonly System.Random _random = new();
 
+    public AudioPlayer()
+    {
+        foreach (AudioType type in Enum.GetValues(typeof(AudioType)))
+            _audioCollections[type] = new ClipCollection();
+    }
+
     public int GetCountFor(AudioType type) => _audioCollections[type].Count;
     public bool HasAudioFor(AudioType type) => _audioCollections[type].HasAudio;
     public float LastPlayedLengthFor(AudioType type) => _audioCollections[type].LastPlayed?.Clip?.length ?? 0;
