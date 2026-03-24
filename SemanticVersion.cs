@@ -87,7 +87,7 @@ public class SemanticVersion : IComparable<SemanticVersion>
 
         versionString = versionString.TrimStart('v', 'V');
 
-        Match match = _s_SemVerRegex.Match(versionString);
+        Match match = s_SemVerRegex.Match(versionString);
         if (!match.Success) throw new ArgumentException($"Invalid semver 2.0.0: {versionString}");
 
         Major = int.Parse(match.Groups[1].Value);
